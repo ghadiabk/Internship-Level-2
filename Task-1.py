@@ -60,7 +60,7 @@ ax2.set_title('R-squared (Higher is Better)')
 ax2.set_ylabel('R2 Score')
 
 plt.tight_layout()
-plt.savefig('Level-2/plots/model_comparison.png')
+plt.savefig('Level-2/plots/t1/model_comparison.png')
 
 plt.figure(figsize=(8, 6))
 plt.scatter(y_test, y_pred_rf, alpha=0.5)
@@ -86,7 +86,7 @@ ax2.set_ylabel('R2 Score')
 ax2.tick_params(axis='x', rotation=45)
 
 plt.tight_layout()
-plt.savefig('Level-2/plots/model_comparison.png')
+plt.savefig('Level-2/plots/t1/model_comparison.png')
 
 df = pd.read_csv('Level-2/House_Data.csv', sep=r'\s+', header=None)
 X = df.iloc[:, :-1]
@@ -103,4 +103,4 @@ plt.xlabel('Actual Prices')
 plt.ylabel('Predicted Prices')
 plt.title('Random Forest: Actual vs Predicted Prices')
 plt.grid(True)
-plt.savefig('Level-2/plots/rf_actual_vs_predicted.png')
+plt.savefig('Level-2/plots/t1/rf_actual_vs_predicted.png')
