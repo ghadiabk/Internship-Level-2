@@ -1,0 +1,3 @@
+The Elbow Method and Silhouette Score both pointed toward k=3 as a stable configuration.
+The primary drivers of separation are Engagement Volume (PCA1) and Sentiment Polarity (PCA2).
+This suggests that for this dataset, sentiment is a strong predictor of how much engagement a post will receive.

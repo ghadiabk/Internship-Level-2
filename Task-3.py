@@ -1,78 +1,64 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-import os
-from statsmodels.tsa.seasonal import seasonal_decompose
-from statsmodels.tsa.holtwinters import SimpleExpSmoothing
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from sklearn.metrics import mean_squared_error
-import warnings
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
 
-warnings.filterwarnings('ignore')
-output_dir = 'Level-2/plots/t3'
-os.makedirs(output_dir, exist_ok=True)
-
+# 1. Load and Preprocess Data
 df = pd.read_csv('Level-2/Sentiment_Data.csv')
-df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-df = df.sort_values('Timestamp')
 
-ts = df.resample('M', on='Timestamp').size()
+def simplify_sentiment(s):
+    s = str(s).strip().lower()
+    positives = ['positive', 'happiness', 'joy', 'love', 'excited', 'inspired', 'contentment', 'gratitude']
+    negatives = ['negative', 'anger', 'fear', 'sadness', 'disgust', 'disappointed', 'bitter', 'frustrated']
+    if any(p in s for p in positives): return 1
+    if any(n in s for n in negatives): return -1
+    return 0
 
-decomposition = seasonal_decompose(ts, model='additive', period=12)
+df['Sentiment_Score'] = df['Sentiment'].apply(simplify_sentiment)
 
-fig, axes = plt.subplots(4, 1, figsize=(12, 10), sharex=True)
-axes[0].plot(ts, label='Original', color='blue')
-axes[0].set_title('Time Series Decomposition')
-axes[0].legend(loc='upper left')
+features = ['Retweets', 'Likes', 'Sentiment_Score']
+X = df[features].dropna()
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-axes[1].plot(decomposition.trend, label='Trend', color='red')
-axes[1].legend(loc='upper left')
+wcss = []
+sil_scores = []
+k_range = range(2, 11)
 
-axes[2].plot(decomposition.seasonal, label='Seasonality', color='green')
-axes[2].legend(loc='upper left')
+for k in k_range:
+    kmeans = KMeans(n_clusters=k, init='k-means++', random_state=42, n_init=10)
+    kmeans.fit(X_scaled)
+    wcss.append(kmeans.inertia_)
+    sil_scores.append(silhouette_score(X_scaled, kmeans.labels_))
 
-axes[3].plot(decomposition.resid, label='Residuals', color='orange')
-axes[3].legend(loc='upper left')
+plt.figure(figsize=(12, 5))
+plt.subplot(1, 2, 1)
+plt.plot(range(2, 11), wcss, marker='o', color='b')
+plt.title('Elbow Method (WCSS)')
+plt.xlabel('Number of Clusters')
 
-plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'ts_decomposition.png'))
+plt.subplot(1, 2, 2)
+plt.plot(range(2, 11), sil_scores, marker='o', color='r')
+plt.title('Silhouette Scores')
+plt.xlabel('Number of Clusters')
+plt.savefig('Level-2/plots/t3/optimization_metrics.png')
 
-ts_ma = ts.rolling(window=3).mean()
-model_ses = SimpleExpSmoothing(ts).fit(smoothing_level=0.3, optimized=False)
-ts_ses = model_ses.fittedvalues
+optimal_k = 3
+kmeans = KMeans(n_clusters=optimal_k, init='k-means++', random_state=42, n_init=10)
+df['Cluster'] = kmeans.fit_predict(X_scaled)
 
-plt.figure(figsize=(12, 6))
-plt.plot(ts, label='Original Data', alpha=0.4)
-plt.plot(ts_ma, label='3-Month Moving Average', color='red', linewidth=2)
-plt.plot(ts_ses, label='Exponential Smoothing (SES)', color='green', linestyle='--')
-plt.title('Smoothing Techniques: MA vs SES')
-plt.legend()
-plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'ts_smoothing.png'))
+pca = PCA(n_components=2)
+pca_data = pca.fit_transform(X_scaled)
+df['PCA1'], df['PCA2'] = pca_data[:, 0], pca_data[:, 1]
 
-train_size = int(len(ts) * 0.8)
-train, test = ts[0:train_size], ts[train_size:]
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x='PCA1', y='PCA2', hue='Cluster', data=df, palette='viridis', s=100)
+plt.title('K-Means Clusters (PCA Projection)')
+plt.savefig('Level-2/plots/t3/cluster_visualization.png')
 
-model_sarima = SARIMAX(train, order=(1, 1, 1), seasonal_order=(1, 1, 1, 12))
-model_fit = model_sarima.fit(disp=False)
-
-forecast_obj = model_fit.get_forecast(steps=len(test))
-forecast_mean = forecast_obj.summary_frame()['mean']
-conf_int = forecast_obj.summary_frame()[['mean_ci_lower', 'mean_ci_upper']]
-
-rmse = np.sqrt(mean_squared_error(test, forecast_mean))
-print(f"Model Evaluation (RMSE): {rmse:.2f}")
-
-plt.figure(figsize=(12, 6))
-plt.plot(train, label='Training Data')
-plt.plot(test, label='Actual Test Data', color='gray', alpha=0.7)
-plt.plot(forecast_mean, label='SARIMA Forecast', color='red')
-plt.fill_between(conf_int.index, conf_int['mean_ci_lower'], 
-                 conf_int['mean_ci_upper'], color='pink', alpha=0.3, label='Confidence Interval')
-plt.title(f'Sentiment Volume Forecast (RMSE: {rmse:.2f})')
-plt.xlabel('Date')
-plt.ylabel('Monthly Post Count')
-plt.legend()
-plt.tight_layout()
-plt.savefig(os.path.join(output_dir, 'ts_forecast.png'))
+print("Cluster Summary (Mean Metrics):")
+print(df.groupby('Cluster')[features].mean())
